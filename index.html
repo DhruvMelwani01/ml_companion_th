@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#031715">
+<title>JACK.SYS</title>
+<style>
+  :root{
+    --bg0:#020D0C; --bg1:#06231F; --panel:#052A26; --panel2:#03201C;
+    --neon:#2BF5C8; --neon-dim:rgba(43,245,200,.42); --neon-faint:rgba(43,245,200,.14);
+    --mint:#9FFFE0; --text:#D7EAE6; --muted:#7FA69E; --amber:#FFB454; --amber-dim:rgba(255,180,84,.35);
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,'Segoe UI','Noto Sans Thai',sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    font-family:var(--sans); color:var(--text); font-size:16.5px; line-height:1.6;
+    background:
+      linear-gradient(rgba(43,245,200,.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(43,245,200,.045) 1px, transparent 1px),
+      radial-gradient(120% 90% at 50% 0%, var(--bg1) 0%, var(--bg0) 70%);
+    background-size:30px 30px, 30px 30px, 100% 100%;
+    background-attachment:fixed;
+  }
+  body::after{
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:50;
+    background:repeating-linear-gradient(0deg, rgba(0,0,0,.10) 0 1px, transparent 1px 4px);
+  }
+  .app{max-width:560px; margin:0 auto; min-height:100%; display:flex; flex-direction:column; padding:0 16px calc(16px + env(safe-area-inset-bottom));}
+
+  .hud{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:14px 2px 10px; font-family:var(--mono); font-size:11.5px; color:var(--muted);
+    border-bottom:1px solid var(--neon-faint);
+  }
+  .hud .sys{color:var(--neon); letter-spacing:2px; text-shadow:0 0 8px var(--neon-dim); white-space:nowrap;}
+  .hud .prog{letter-spacing:1px; white-space:nowrap;}
+  .lang{display:flex; border:1px solid var(--neon-dim); clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);}
+  .lang button{
+    font-family:var(--mono); font-size:11px; letter-spacing:1px; padding:5px 11px;
+    background:transparent; color:var(--muted); border:none; cursor:pointer;
+  }
+  .lang button.on{background:var(--neon); color:#04201C; font-weight:700;}
+  .pbar{height:2px; background:var(--neon-faint);}
+  .pbar i{display:block; height:100%; background:var(--neon); box-shadow:0 0 8px var(--neon-dim); transition:width .35s ease; width:0;}
+
+  .stage{flex:1; display:flex; flex-direction:column; padding-top:16px;}
+  .scene-title{
+    font-family:var(--mono); font-size:12px; letter-spacing:3px; color:var(--amber);
+    text-transform:uppercase; margin-bottom:6px;
+  }
+  h1{
+    font-size:25px; font-weight:800; line-height:1.35; color:#fff; letter-spacing:.3px;
+    text-shadow:0 0 14px var(--neon-dim); margin-bottom:14px;
+  }
+
+  .jack{
+    display:flex; gap:12px; align-items:flex-start; margin-bottom:16px;
+    border:1px solid var(--neon-dim); background:linear-gradient(180deg, rgba(43,245,200,.07), rgba(43,245,200,.02));
+    padding:13px; cursor:pointer;
+    clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px);
+  }
+  .jack svg{flex:0 0 46px; height:46px; filter:drop-shadow(0 0 6px var(--neon-dim));}
+  .jack .who{font-family:var(--mono); font-size:10.5px; letter-spacing:2px; color:var(--neon); margin-bottom:3px;}
+  .jack .say{font-size:15.5px; color:var(--mint); min-height:24px;}
+  .jack .cur{display:inline-block; width:8px; height:15px; background:var(--neon); vertical-align:-2px; margin-left:2px; animation:blink 1s steps(1) infinite;}
+  @keyframes blink{50%{opacity:0}}
+  .jack .hint{font-family:var(--mono); font-size:10px; color:var(--muted); margin-top:5px; letter-spacing:1px;}
+
+  .panel{
+    border:1px solid var(--neon-faint); background:linear-gradient(180deg, var(--panel), var(--panel2));
+    padding:15px; margin-top:12px;
+    clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+  }
+  .panel h3{font-size:16px; color:var(--neon); margin-bottom:6px; letter-spacing:.5px;}
+  .panel p{font-size:15px;}
+  .tagline{font-family:var(--mono); font-size:11px; letter-spacing:2px; color:var(--amber); margin-bottom:6px;}
+  .muted{color:var(--muted); font-size:13.5px; margin-top:10px;}
+  .kv{display:flex; flex-wrap:wrap; gap:8px; margin-top:14px;}
+  .kv span{
+    font-family:var(--mono); font-size:12px; color:var(--neon);
+    border:1px solid var(--neon-dim); padding:6px 11px;
+    clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+  }
+  .steps{counter-reset:st;}
+  .steps .st{display:flex; gap:12px; margin-top:11px; align-items:center;}
+  .steps .st::before{
+    counter-increment:st; content:'0' counter(st);
+    font-family:var(--mono); color:var(--neon); border:1px solid var(--neon-dim);
+    padding:5px 8px; font-size:13px; line-height:1;
+    text-shadow:0 0 8px var(--neon-dim);
+  }
+  .steps .st b{color:#fff;}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:4px;}
+  .cell{border:1px solid var(--neon-faint); background:rgba(43,245,200,.04); padding:11px 12px; font-size:13.5px;}
+  .cell .code{font-family:var(--mono); font-size:10.5px; letter-spacing:2px; color:var(--amber);}
+  .cell b{display:block; color:#fff; margin:3px 0 2px; font-size:14px;}
+
+  .recipes{display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-top:10px;}
+  .recipe{border:1px solid var(--neon-faint); background:rgba(43,245,200,.05); padding:10px 11px; font-size:13.5px;}
+  .recipe b{color:var(--neon); font-family:var(--mono); font-size:12px; letter-spacing:1px;}
+  .recipe .res{margin-top:5px; font-weight:800; color:#fff;}
+  .recipe.target{grid-column:1/-1; border-color:var(--amber-dim); background:rgba(255,180,84,.06);}
+  .recipe.target b, .recipe.target .res{color:var(--amber);}
+  input[type=range]{width:100%; margin:16px 0 4px; accent-color:var(--neon); height:34px;}
+  .sliderval{text-align:center; font-family:var(--mono); font-size:26px; font-weight:700; color:var(--neon); text-shadow:0 0 10px var(--neon-dim);}
+  .result{display:none; margin-top:13px; border:1px solid var(--neon-dim); background:rgba(43,245,200,.07); padding:13px; font-size:14.5px;}
+  .result.show{display:block;}
+  .result b{color:var(--neon);}
+
+  .paths{margin-top:4px;}
+  .paths button{
+    display:flex; align-items:center; gap:12px; width:100%; text-align:left;
+    border:1px solid var(--neon-dim); background:rgba(43,245,200,.05); color:var(--text);
+    font-family:var(--sans); font-size:16px; font-weight:700; padding:15px 14px; margin-top:11px; cursor:pointer;
+    clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+    transition:background .15s;
+  }
+  .paths button:active{background:rgba(43,245,200,.16);}
+  .paths .code{font-family:var(--mono); font-size:11px; letter-spacing:1.5px; color:var(--amber); border:1px solid var(--amber-dim); padding:5px 8px; flex-shrink:0;}
+  .paths small{display:block; font-weight:400; font-size:13px; color:var(--muted);}
+
+  .qz{margin-top:14px;}
+  .qz .q{font-weight:700; color:#fff; font-size:15px; margin-bottom:4px;}
+  .opt{
+    display:block; width:100%; text-align:left; border:1px solid var(--neon-faint);
+    background:rgba(43,245,200,.04); color:var(--text); font-family:var(--sans);
+    font-size:14.5px; padding:11px 12px; margin-top:8px; cursor:pointer;
+  }
+  .opt.correct{border-color:var(--neon); background:rgba(43,245,200,.16); color:#fff; font-weight:700;}
+  .opt.wrong{border-color:var(--amber); background:rgba(255,180,84,.10);}
+  .opt:disabled{opacity:.95;}
+  .fb{display:none; margin-top:7px; font-family:var(--mono); font-size:12.5px; letter-spacing:.5px;}
+  .fb.show{display:block;}
+  .fb.ok{color:var(--neon);}
+  .fb.no{color:var(--amber);}
+  .switch{background:none; border:none; color:var(--muted); font-family:var(--mono); font-size:11.5px; letter-spacing:1.5px; margin:14px auto 0; display:block; cursor:pointer; text-decoration:underline;}
+
+  .btn{
+    display:block; width:100%; border:1px solid var(--neon); background:rgba(43,245,200,.10);
+    color:var(--neon); font-family:var(--mono); font-size:15px; font-weight:700; letter-spacing:2px;
+    padding:13px; margin-top:14px; cursor:pointer; text-transform:uppercase;
+    clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+    text-shadow:0 0 8px var(--neon-dim); transition:background .15s;
+  }
+  .btn:active{background:rgba(43,245,200,.22); transform:scale(.985);}
+  .nav{display:flex; gap:10px; margin-top:auto; padding-top:20px;}
+  .nav .btn{margin-top:0;}
+  .nav .back{flex:0 0 32%; color:var(--muted); border-color:var(--neon-faint); background:transparent; text-shadow:none;}
+  .nav .next{flex:1;}
+
+  .gate{flex:1; display:flex; flex-direction:column; justify-content:center; text-align:center; padding-bottom:30px;}
+  .gate .boot{font-family:var(--mono); font-size:11px; letter-spacing:2px; color:var(--muted); margin-bottom:18px;}
+  .gate .boot .ok{color:var(--neon);}
+  .gate h1{font-size:27px; line-height:1.45;}
+  .gate .th-line{font-size:17px; color:var(--mint); margin-top:14px;}
+  .gate .sub{font-family:var(--mono); font-size:11px; letter-spacing:1.5px; color:var(--muted); margin-top:20px;}
+  .flicker{animation:flick 4s linear infinite;}
+  @keyframes flick{0%,93%,97%,100%{opacity:1} 94%,96%{opacity:.55}}
+
+  .mindset{
+    border:1px solid var(--neon-dim); padding:18px 16px; margin-top:12px; text-align:center;
+    background:linear-gradient(180deg, rgba(43,245,200,.08), rgba(43,245,200,.02));
+    clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px);
+  }
+  .mindset p{font-size:17px; font-weight:700; color:#fff; line-height:1.7;}
+  .qrbox{
+    width:170px; height:170px; margin:18px auto 6px; border:1.5px dashed var(--neon-dim);
+    display:flex; align-items:center; justify-content:center; text-align:center;
+    font-family:var(--mono); font-size:11px; letter-spacing:1px; color:var(--muted);
+  }
+  .ig{font-family:var(--mono); font-size:13px; letter-spacing:1px; color:var(--neon); text-align:center;}
+  footer{margin-top:22px; text-align:center; font-size:12px; color:var(--muted); line-height:1.8;}
+  footer b{color:var(--mint);}
+  .restart{background:none; border:none; color:var(--muted); font-family:var(--mono); font-size:11.5px; letter-spacing:2px; margin:16px auto 0; display:block; cursor:pointer; text-decoration:underline;}
+
+  @media (prefers-reduced-motion:reduce){ .flicker,.jack .cur{animation:none;} }
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+
+<script>
+'use strict';
+var LANG = 'th';
+var SCENE = 0;
+var BRANCH = null;
+var typer = { t:null, full:'', i:0, el:null, done:true };
+
+var JACK_SVG = '<svg viewBox="0 0 46 46" width="46" height="46" aria-hidden="true">' +
+ '<rect x="7" y="10" width="32" height="26" rx="5" fill="none" stroke="#2BF5C8" stroke-width="2"/>' +
+ '<line x1="23" y1="4" x2="23" y2="10" stroke="#2BF5C8" stroke-width="2"/>' +
+ '<circle cx="23" cy="3.5" r="2.2" fill="#2BF5C8"/>' +
+ '<circle cx="16.5" cy="21" r="3" fill="#2BF5C8"/>' +
+ '<circle cx="29.5" cy="21" r="3" fill="#2BF5C8"/>' +
+ '<line x1="16" y1="29.5" x2="30" y2="29.5" stroke="#9FFFE0" stroke-width="2" stroke-linecap="round"/>' +
+ '<line x1="3" y1="22" x2="7" y2="22" stroke="#2BF5C8" stroke-width="2"/>' +
+ '<line x1="39" y1="22" x2="43" y2="22" stroke="#2BF5C8" stroke-width="2"/></svg>';
+
+function L(obj){ return obj[LANG]; }
+var UI = {
+  next:{th:'ถัดไป', en:'NEXT'}, back:{th:'ย้อน', en:'BACK'},
+  enter:{th:'แตะเพื่อเริ่ม', en:'TAP TO ENTER'},
+  finish:{th:'จบภารกิจ', en:'MISSION COMPLETE'},
+  who:{th:'JACK · ผู้ช่วยของดรูฟ', en:'JACK · DHRUV\u2019S ASSISTANT'},
+  hint:{th:'แตะกล่องนี้เพื่อข้ามการพิมพ์', en:'tap this box to skip typing'},
+  restart:{th:'เริ่มใหม่', en:'RESTART'},
+  scene:{th:'ฉาก', en:'SCENE'},
+  reveal:{th:'เฉลย', en:'REVEAL'},
+  switchPath:{th:'เปลี่ยนสาย', en:'SWITCH PATH'},
+  ok:{th:'ถูกต้อง!', en:'CORRECT!'},
+  no:{th:'ยังไม่ใช่ ดูข้อที่สว่างครับ', en:'NOT QUITE, SEE THE LIT ONE'},
+};
+
+/* ---------- branch data ---------- */
+var BR = {
+  env: {
+    tag:'ENV',
+    name:{th:'สิ่งแวดล้อม', en:'ENVIRONMENTAL'},
+    jack:{
+      th:'สายสิ่งแวดล้อม ฟังทางนี้ครับ ชาวประมงดูฟ้าแล้วรู้ว่าฝนจะมา เพราะเห็นมาทั้งชีวิต ML คือชาวประมงที่ดูข้อมูลย้อนหลังเป็นล้านชั่วโมง',
+      en:'Environmental crew, listen. A fisherman reads the sky because he has watched it all his life. ML is a fisherman who watched a million hours of data.'},
+    ana:{
+      th:'ป้อนข้อมูลฝุ่นและสภาพอากาศย้อนหลังหลายปี มันจะเรียนรูปแบบ แล้วเตือนวัน PM2.5 สูงล่วงหน้าได้',
+      en:'Feed it years of dust and weather records. It learns the pattern, then warns of high PM2.5 days in advance.'},
+    cells:[
+      ['PM2.5', {th:'เตือนฝุ่น', en:'Dust alerts'},        {th:'รู้ล่วงหน้าก่อนฝุ่นมา', en:'Know before the haze comes'}],
+      ['WATER', {th:'คุณภาพน้ำ', en:'Water quality'},      {th:'เซนเซอร์เฝ้าแม่น้ำ 24 ชม.', en:'Sensors watch rivers 24/7'}],
+      ['SAT',   {th:'ภาพดาวเทียม', en:'Satellites'},       {th:'จับการหายไปของป่า', en:'Spot forests disappearing'}],
+      ['GREEN', {th:'งานของดรูฟ', en:'Dhruv\u2019s work'},  {th:'คอนกรีตคาร์บอนต่ำ หาสูตรไวขึ้น', en:'Low-carbon concrete, found faster'}],
+    ],
+    quiz:[
+      { q:{th:'อยากให้ AI เตือนวันฝุ่นสูง ต้องป้อนอะไร', en:'To get AI dust warnings, feed it what?'},
+        opts:[
+          [{th:'ข้อมูลฝุ่นและอากาศย้อนหลัง', en:'Years of dust and weather data'}, true],
+          [{th:'กฎหมายสิ่งแวดล้อม', en:'Environmental law books'}, false],
+          [{th:'ความรู้สึกของเรา', en:'Our feelings'}, false]]},
+      { q:{th:'งานคอนกรีตของดรูฟช่วยโลกยังไง', en:'How does Dhruv\u2019s work help the planet?'},
+        opts:[
+          [{th:'ทำให้ตึกสวยขึ้น', en:'Prettier buildings'}, false],
+          [{th:'ลดการลองผิดลองถูก ลดปูน ลดคาร์บอน', en:'Less trial and error, less cement, less carbon'}, true],
+          [{th:'ไม่เกี่ยวเลย', en:'It does not'}, false]]},
+    ],
+  },
+  cs: {
+    tag:'CS',
+    name:{th:'คอมพิวเตอร์', en:'COMPUTER SCIENCE'},
+    jack:{
+      th:'สาย CS ฟังทางนี้ครับ โค้ดปกติคุณเขียนกฎให้คอมทำตาม แต่ ML กลับด้าน คุณให้ตัวอย่าง แล้วคอมเขียนกฎเอง',
+      en:'CS crew, listen. Normal code: you write rules, the machine follows. ML flips it: you give examples, the machine writes the rules.'},
+    ana:{
+      th:'เหมือนตัวกรองสแปม ไม่มีใครเขียน if หมื่นบรรทัด แค่ให้ตัวอย่างอีเมลขยะเยอะพอ โมเดลหากฎเอง',
+      en:'Like a spam filter. Nobody writes ten thousand if statements. Show enough junk mail and the model finds the rules itself.'},
+    cells:[
+      ['SPAM',  {th:'กรองสแปม', en:'Spam filter'},        {th:'เรียนจากอีเมลขยะจริง', en:'Learns from real junk mail'}],
+      ['CODE',  {th:'ผู้ช่วยเขียนโค้ด', en:'Code assistants'}, {th:'เรียนจากโค้ดนับล้านไฟล์', en:'Learned from millions of files'}],
+      ['VISION',{th:'จดจำภาพ', en:'Vision'},              {th:'ปลดล็อกหน้าจอด้วยใบหน้า', en:'Face unlock on your phone'}],
+      ['DATA',  {th:'งานของดรูฟ', en:'Dhruv\u2019s work'}, {th:'โมเดล 10 ตัวแข่งบนข้อมูลจริง', en:'10 models raced on real data'}],
+    ],
+    quiz:[
+      { q:{th:'ML ต่างจากโปรแกรมปกติตรงไหน', en:'How is ML different from normal code?'},
+        opts:[
+          [{th:'เร็วกว่าเสมอ', en:'Always faster'}, false],
+          [{th:'เรียนกฎเองจากตัวอย่าง', en:'Learns rules from examples'}, true],
+          [{th:'ไม่ต้องใช้ข้อมูล', en:'Needs no data'}, false]]},
+      { q:{th:'ทำไมงานดรูฟห้ามสูตรเดียวกันอยู่ทั้งชุดฝึกและชุดสอบ', en:'Why must a recipe never sit in both train and test sets?'},
+        opts:[
+          [{th:'ให้เทรนเร็วขึ้น', en:'Faster training'}, false],
+          [{th:'กันคะแนนเฟ้อจากข้อมูลรั่ว', en:'Stops leakage inflating the score'}, true],
+          [{th:'ให้โค้ดสั้นลง', en:'Shorter code'}, false]]},
+    ],
+  },
+  struct: {
+    tag:'STRUCT',
+    name:{th:'โยธา โครงสร้าง', en:'STRUCTURAL CIVIL'},
+    jack:{
+      th:'สายโครงสร้าง อันนี้บ้านคุณเลยครับ วิศวกรรุ่นพี่มองส่วนผสมแล้วเดากำลังได้จากประสบการณ์ ML คือรุ่นพี่ที่อ่านผลทดสอบมาแล้ว 626 สูตร',
+      en:'Structural crew, this is home ground. A senior engineer can eyeball a mix and guess its strength. ML is a senior who has read 626 test results.'},
+    ana:{
+      th:'ป้อนสูตรใหม่ มันตอบกำลังใน 1 วินาที พร้อมช่วงความมั่นใจ ใช้คัดสูตรก่อนหล่อจริง ประหยัดเวลาและปูน',
+      en:'Give it a new mix, it answers in a second, with a confidence range. Screen recipes before casting. Save time and cement.'},
+    cells:[
+      ['MIX',   {th:'ส่วนผสม', en:'Mix design'},      {th:'คัดสูตรก่อนลงแล็บ', en:'Screen before the lab'}],
+      ['CRACK', {th:'รอยร้าว', en:'Cracks'},          {th:'AI อ่านภาพหารอยร้าว', en:'AI spots cracks in photos'}],
+      ['BRIDGE',{th:'สะพาน', en:'Bridges'},           {th:'ซ่อมก่อนพัง', en:'Repair before failure'}],
+      ['LAB',   {th:'งานของดรูฟ', en:'Dhruv\u2019s work'}, {th:'พิสูจน์แล้วกับก้อนจริง 11 สูตร', en:'Proven on 11 real mixes'}],
+    ],
+    quiz:[
+      { q:{th:'คำตอบแบบไหนปลอดภัยกว่าสำหรับงานออกแบบ', en:'Which answer is safer for design work?'},
+        opts:[
+          [{th:'128 เป๊ะ ๆ', en:'Exactly 128'}, false],
+          [{th:'118 ถึง 138 มั่นใจ 90%', en:'118 to 138 at 90% confidence'}, true],
+          [{th:'แข็งแน่นอน เชื่อผม', en:'Strong for sure, trust me'}, false]]},
+      { q:{th:'ดรูฟพิสูจน์โมเดลกับอะไร', en:'What did Dhruv test the model against?'},
+        opts:[
+          [{th:'ความรู้สึก', en:'A feeling'}, false],
+          [{th:'คอนกรีตจริง 11 สูตรในแล็บ', en:'11 real mixes in the lab'}, true],
+          [{th:'โพลออนไลน์', en:'An online poll'}, false]]},
+    ],
+  },
+};
+
+/* ---------- scenes ---------- */
+var SCENES = [
+
+/* 0 gate */
+{ gate:true,
+  render:function(){
+    return '<div class="gate">' +
+      '<div class="boot"><span class="ok">[ OK ]</span> JACK.SYS ONLINE · 14 SEP 2026</div>' +
+      (LANG==='th'
+        ? '<h1 class="flicker">ว่าที่อัจฉริยะทุกคน<br>โลกกำลังรอความคิดสร้างสรรค์ของคุณ</h1>' +
+          '<p class="th-line">เป็นวิศวกร ต้องไม่หยุดสงสัย ไม่หยุดเรียนรู้</p>'
+        : '<h1 class="flicker">HEY UPCOMING GENIUSES<br>THE WORLD AWAITS YOUR CREATIVITY</h1>' +
+          '<p class="th-line">Never stop the curiosity. Never stop learning.</p>') +
+      '<div class="sub">' + (LANG==='th' ? 'คู่มือประกอบการนำเสนอของดรูฟ' : 'COMPANION TO DHRUV\u2019S TALK') + '</div>' +
+      '<button class="btn" onclick="go(1)">' + L(UI.enter) + '</button>' +
+      '</div>';
+  }},
+
+/* 1 jack intro */
+{ title:{th:'พบไกด์ของคุณ', en:'MEET YOUR GUIDE'},
+  code:'BRIEFING', showHint:true,
+  jack:{
+    th:'สวัสดีครับ ผมแจ็ค ผู้ช่วยของพี่ดรูฟ เดี๋ยวผมพาทัวร์แบบง่ายสุด ๆ แล้วช่วงท้ายคุณได้เลือกเส้นทางของตัวเองด้วยครับ',
+    en:'Hi, I am Jack, Dhruv\u2019s assistant. Easy tour ahead, and near the end you get to pick your own path.'},
+  body:function(){
+    var t = LANG==='th';
+    return '<div class="panel"><div class="tagline">MISSION</div><p>' +
+      (t ? 'รู้จัก ML ใน 5 นาที แล้วดูว่ามันโผล่ในสายเรียนของคุณตรงไหน'
+         : 'Meet ML in 5 minutes, then see where it shows up in your own field.') + '</p>' +
+      '<div class="kv"><span>' + (t?'แตะ NEXT ไปต่อ':'TAP NEXT') + '</span>' +
+      '<span>' + (t?'ปุ่ม TH EN เปลี่ยนภาษา':'TH EN SWITCHES LANGUAGE') + '</span></div></div>';
+  }},
+
+/* 2 what is ML + how it learns */
+{ title:{th:'เครื่องจักรเรียนรู้ยังไง', en:'HOW A MACHINE LEARNS'},
+  code:'CORE CONCEPT',
+  jack:{
+    th:'เครื่องเรียนเหมือนเด็กครับ ไม่ต้องมีใครเขียนกฎให้ แค่เห็นตัวอย่างเยอะพอ ก็จับรูปแบบได้เอง',
+    en:'A machine learns like a child. Nobody writes the rules. See enough examples and it finds the pattern itself.'},
+  body:function(){
+    var t = LANG==='th';
+    return '<div class="panel"><div class="steps">' +
+      '<div class="st"><div>' + (t?'ป้อน<b>ตัวอย่าง</b>เยอะ ๆ':'Feed it many <b>examples</b>') + '</div></div>' +
+      '<div class="st"><div>' + (t?'มัน<b>จับรูปแบบ</b>เอง':'It <b>finds the pattern</b> itself') + '</div></div>' +
+      '<div class="st"><div>' + (t?'ใช้<b>ทำนาย</b>สิ่งที่ไม่เคยเห็น':'It <b>predicts</b> the unseen') + '</div></div>' +
+      '</div>' +
+      '<div class="kv"><span>' + (t?'นี่แหละ Machine Learning':'THAT IS MACHINE LEARNING') + '</span></div></div>';
+  }},
+
+/* 3 game */
+{ title:{th:'ทดลองเป็น AI', en:'BE THE AI'},
+  code:'SIMULATION',
+  jack:{
+    th:'ลองเองเลยครับ ดูสามสูตรคอนกรีตนี้ จับรูปแบบ แล้วทายสูตร D',
+    en:'Try it yourself. Study three concrete recipes, find the pattern, predict D.'},
+  body:function(){
+    var t = LANG==='th';
+    return '<div class="panel"><div class="tagline">' + (t?'ข้อมูลฝึก (ตัวเลขสมมุติ)':'TRAINING DATA (ILLUSTRATIVE)') + '</div>' +
+      '<div class="recipes">' +
+      '<div class="recipe"><b>A</b><br>' + (t?'น้ำเยอะ · บ่ม 7 วัน':'high water · 7 days') + '<div class="res">85 MPa</div></div>' +
+      '<div class="recipe"><b>B</b><br>' + (t?'น้ำเยอะ · บ่ม 28 วัน':'high water · 28 days') + '<div class="res">110 MPa</div></div>' +
+      '<div class="recipe"><b>C</b><br>' + (t?'น้ำน้อย · บ่ม 28 วัน':'low water · 28 days') + '<div class="res">130 MPa</div></div>' +
+      '<div class="recipe target"><b>D</b><br>' + (t?'น้ำน้อย · เส้นใยเหล็ก · บ่ม 28 วัน':'low water · steel fibres · 28 days') + '<div class="res">???</div></div>' +
+      '</div>' +
+      '<input type="range" id="guess" min="60" max="180" value="100" oninput="document.getElementById(\'gv\').textContent=this.value">' +
+      '<div class="sliderval"><span id="gv">100</span> MPa</div>' +
+      '<button class="btn" onclick="revealGuess()">' + L(UI.reveal) + '</button>' +
+      '<div class="result" id="guessResult"></div></div>';
+  }},
+
+/* 4 scope general */
+{ title:{th:'ML อยู่รอบตัวคุณ', en:'ML IS EVERYWHERE'},
+  code:'SCOPE SCAN',
+  jack:{
+    th:'คุณใช้ ML ทุกวันโดยไม่รู้ตัวครับ',
+    en:'You already use ML every day without noticing.'},
+  body:function(){
+    var t = LANG==='th';
+    var c = [
+      ['FACE', {th:'มือถือ', en:'Your phone'},   {th:'ปลดล็อกด้วยใบหน้า', en:'Face unlock'}],
+      ['FEED', {th:'คลิปถัดไป', en:'Your feed'}, {th:'เดาใจว่าคุณอยากดูอะไร', en:'Guesses what you want next'}],
+      ['MED',  {th:'โรงพยาบาล', en:'Hospitals'}, {th:'ช่วยหมออ่านฟิล์มเอกซเรย์', en:'Helps doctors read scans'}],
+      ['FARM', {th:'ไร่นา', en:'Farms'},         {th:'เตือนโรคพืชจากภาพใบ', en:'Spots crop disease from leaves'}],
+    ];
+    var h = '<div class="grid2">';
+    for (var i=0;i<c.length;i++){
+      h += '<div class="cell"><span class="code">[' + c[i][0] + ']</span><b>' + L(c[i][1]) + '</b>' + L(c[i][2]) + '</div>';
+    }
+    h += '</div><div class="kv"><span>' + (t?'และตอนนี้ มาถึงงานวิศวกรรมแล้ว':'AND NOW IT HAS REACHED ENGINEERING') + '</span></div>';
+    return h;
+  }},
+
+/* 5 project */
+{ title:{th:'ภารกิจของดรูฟ', en:'DHRUV\u2019S MISSION'},
+  code:'PROJECT LOG',
+  jack:{
+    th:'พี่ดรูฟสอน AI ให้ทายกำลังคอนกรีตครับ เหมือนแข่งทำอาหาร เชฟ AI 10 คน กรรมการชิมแบบไม่รู้จานใคร',
+    en:'Dhruv taught an AI to predict concrete strength. Like a cooking contest: ten AI chefs, judges taste blind.'},
+  body:function(){
+    var t = LANG==='th';
+    return '<div class="panel"><div class="steps">' +
+      '<div class="st"><div>' + (t?'รวบรวม<b>ผลทดสอบจริง 626 สูตร</b>':'Collect <b>626 real test results</b>') + '</div></div>' +
+      '<div class="st"><div>' + (t?'ให้ <b>AI 10 ตัว</b>แข่งกัน':'Race <b>10 AIs</b>') + '</div></div>' +
+      '<div class="st"><div>' + (t?'สอบแบบ<b>ห้ามเห็นเฉลย</b>':'Exam with <b>no peeking</b>') + '</div></div>' +
+      '<div class="st"><div>' + (t?'พิสูจน์กับ<b>คอนกรีตจริง 11 สูตร</b>':'Prove it on <b>11 real mixes</b>') + '</div></div>' +
+      '</div>' +
+      '<div class="kv"><span>' + (t?'แม่นยำ \u2248 91%':'ACCURACY \u2248 91%') + '</span>' +
+      '<span>' + (t?'ตอบเป็นช่วง เช่น 118 ถึง 138':'ANSWERS AS A RANGE, 118 TO 138') + '</span>' +
+      '<span>' + (t?'ก้อนจริงเข้าช่วง 11/11':'REAL MIXES IN RANGE 11/11') + '</span></div></div>';
+  }},
+
+/* 6 choose your path */
+{ title:{th:'เลือกเส้นทางของคุณ', en:'CHOOSE YOUR PATH'},
+  code:'SELECT MODE', noNext:true,
+  jack:{
+    th:'ทีนี้ตาคุณครับ คุณเรียนสายไหน เลือกเลย แล้วผมจะเล่าให้ตรงกับโลกของคุณ',
+    en:'Your move. What do you study? Pick one and I will speak your language.'},
+  body:function(){
+    var h = '<div class="paths">';
+    var keys = ['env','cs','struct'];
+    for (var i=0;i<keys.length;i++){
+      var b = BR[keys[i]];
+      h += '<button onclick="pickPath(\'' + keys[i] + '\')"><span class="code">' + b.tag + '</span><span>' + L(b.name) +
+           '<small>' + (LANG==='th'?'แตะเพื่อเข้าสาย':'tap to enter') + '</small></span></button>';
+    }
+    h += '</div>';
+    return h;
+  }},
+
+/* 7 branch scene */
+{ code:'FIELD LINK',
+  title:function(){ var b = BR[BRANCH||'struct']; return {th:'สาย ' + L(b.name), en:b.name.en + ' PATH'}; },
+  jack:function(){ return BR[BRANCH||'struct'].jack; },
+  body:function(){
+    var t = LANG==='th';
+    var b = BR[BRANCH||'struct'];
+    var h = '<div class="panel"><div class="tagline">' + (t?'ในโลกของคุณ':'IN YOUR WORLD') + '</div><p>' + L(b.ana) + '</p></div>';
+    h += '<div class="grid2">';
+    for (var i=0;i<b.cells.length;i++){
+      var c = b.cells[i];
+      h += '<div class="cell"><span class="code">[' + c[0] + ']</span><b>' + L(c[1]) + '</b>' + L(c[2]) + '</div>';
+    }
+    h += '</div>';
+    h += '<div class="panel"><div class="tagline">QUIZ</div>';
+    for (var qi=0; qi<b.quiz.length; qi++){
+      var Q = b.quiz[qi];
+      h += '<div class="qz" data-done="0"><div class="q">' + (qi+1) + '. ' + L(Q.q) + '</div>';
+      for (var oi=0; oi<Q.opts.length; oi++){
+        h += '<button class="opt" data-c="' + (Q.opts[oi][1]?1:0) + '" onclick="answerQ(this)">' + L(Q.opts[oi][0]) + '</button>';
+      }
+      h += '<div class="fb"></div></div>';
+    }
+    h += '</div>';
+    h += '<button class="switch" onclick="go(6)">' + L(UI.switchPath) + '</button>';
+    return h;
+  }},
+
+/* 8 final */
+{ title:{th:'วิธีคิดแบบวิศวกร', en:'THE ENGINEER\u2019S MINDSET'},
+  code:'FINAL TRANSMISSION', last:true,
+  jack:{
+    th:'ภารกิจสำเร็จครับ อยากคุยต่อ สแกนไปทักพี่ดรูฟได้เลย',
+    en:'Mission complete. Want to talk more? Scan and message Dhruv.'},
+  body:function(){
+    var t = LANG==='th';
+    return '<div class="mindset"><p>' + (t
+      ? '\u201Cสงสัยตัวเลขที่สวยเกินจริง เชื่อตัวเลขที่ผ่านการทดสอบ และอย่าหยุดเรียนรู้\u201D'
+      : '\u201CDoubt the beautiful number. Trust the tested one. And never stop learning.\u201D') + '</p></div>' +
+      '<div class="qrbox">INSTAGRAM QR<br>(' + (t?'ใส่ภายหลัง':'insert') + ')</div>' +
+      '<div class="ig">@dhruv</div>' +
+      '<footer><b>Dhruv Melwani</b> · ' + (t?'ที่ปรึกษา':'Supervisor') + ' <b>' + (t?'ผศ.ดร.':'Asst. Prof. Dr.') + ' Vatwong Greepala</b><br>KUCSC \u00D7 MSU · ' + (t?'ขอบคุณครับ':'Thank you') + '</footer>' +
+      '<button class="restart" onclick="go(0)">' + L(UI.restart) + '</button>';
+  }},
+];
+
+/* ---------- engine ---------- */
+function render(){
+  var s = SCENES[SCENE];
+  var app = document.getElementById('app');
+  var total = SCENES.length;
+  var h = '';
+
+  h += '<div class="hud"><span class="sys">JACK.SYS</span>' +
+       '<span class="prog">' + L(UI.scene) + ' ' + pad(SCENE) + ' / ' + pad(total - 1) + '</span>' +
+       '<span class="lang">' +
+       '<button class="' + (LANG==='th'?'on':'') + '" onclick="setLang(\'th\')">TH</button>' +
+       '<button class="' + (LANG==='en'?'on':'') + '" onclick="setLang(\'en\')">EN</button>' +
+       '</span></div>' +
+       '<div class="pbar"><i style="width:' + (SCENE/(total-1)*100) + '%"></i></div>';
+
+  if (s.gate){
+    h += '<div class="stage">' + s.render() + '</div>';
+    app.innerHTML = h;
+    return;
+  }
+
+  var title = (typeof s.title === 'function') ? s.title() : s.title;
+  var jackLine = (typeof s.jack === 'function') ? s.jack() : s.jack;
+
+  h += '<div class="stage">';
+  h += '<div class="scene-title">// ' + s.code + '</div>';
+  h += '<h1>' + L(title) + '</h1>';
+  h += '<div class="jack" onclick="skipType()">' + JACK_SVG +
+       '<div><div class="who">' + L(UI.who) + '</div>' +
+       '<div class="say"><span id="jtxt"></span><span class="cur" id="jcur"></span></div>' +
+       (s.showHint ? '<div class="hint">' + L(UI.hint) + '</div>' : '') +
+       '</div></div>';
+  h += s.body();
+  h += '<div class="nav">' +
+       '<button class="btn back" onclick="go(' + (SCENE-1) + ')">' + L(UI.back) + '</button>' +
+       (s.noNext ? '' :
+        (s.last
+          ? '<button class="btn next" onclick="go(0)">' + L(UI.finish) + '</button>'
+          : '<button class="btn next" onclick="go(' + (SCENE+1) + ')">' + L(UI.next) + '</button>')) +
+       '</div>';
+  h += '</div>';
+  app.innerHTML = h;
+  startType(L(jackLine));
+  window.scrollTo(0, 0);
+}
+function pad(n){ return (n < 10 ? '0' : '') + n; }
+function go(n){ stopType(); SCENE = Math.max(0, Math.min(SCENES.length - 1, n)); render(); }
+function setLang(l){ if (LANG === l) return; LANG = l; document.documentElement.lang = l; render(); }
+function pickPath(k){ BRANCH = k; go(7); }
+
+function startType(text){
+  stopType();
+  var el = document.getElementById('jtxt');
+  if (!el){ return; }
+  typer = { t:null, full:text, i:0, el:el, done:false };
+  typer.t = setInterval(function(){
+    typer.i += 2;
+    typer.el.textContent = typer.full.slice(0, typer.i);
+    if (typer.i >= typer.full.length){ finishType(); }
+  }, 16);
+}
+function skipType(){ if (!typer.done){ finishType(); } }
+function finishType(){
+  if (typer.t){ clearInterval(typer.t); typer.t = null; }
+  if (typer.el){ typer.el.textContent = typer.full; }
+  typer.done = true;
+  var c = document.getElementById('jcur');
+  if (c){ c.style.display = 'none'; }
+}
+function stopType(){ if (typer.t){ clearInterval(typer.t); typer.t = null; } typer.done = true; }
+
+function revealGuess(){
+  var g = parseInt(document.getElementById('guess').value, 10);
+  var truth = 150;
+  var d = Math.abs(g - truth);
+  var t = LANG === 'th';
+  var head = d <= 10 ? (t?'แม่นมาก!':'EXCELLENT!') : d <= 25 ? (t?'ใกล้เคียง!':'CLOSE!') : (t?'ไม่เป็นไรครับ':'GOOD TRY');
+  var msg = '<b>' + head + '</b> ' + (t
+    ? 'เฉลย <b>150 MPa</b> คุณห่าง ' + d
+    : 'Answer: <b>150 MPa</b>. You were ' + d + ' off.') +
+    '<br><br>' + (t
+    ? 'คุณเพิ่งทำสิ่งเดียวกับ ML คือจับรูปแบบจากตัวอย่าง แต่ ML ดูทีเดียว 626 สูตร และไม่มีวันลืม'
+    : 'You just did what ML does: spot the pattern. ML reads 626 recipes at once, and never forgets.');
+  var box = document.getElementById('guessResult');
+  box.innerHTML = msg;
+  box.classList.add('show');
+}
+
+function answerQ(btn){
+  var box = btn.parentElement;
+  if (box.getAttribute('data-done') === '1'){ return; }
+  box.setAttribute('data-done', '1');
+  var correct = btn.getAttribute('data-c') === '1';
+  var opts = box.querySelectorAll('.opt');
+  for (var i = 0; i < opts.length; i++){
+    opts[i].disabled = true;
+    if (opts[i].getAttribute('data-c') === '1'){ opts[i].classList.add('correct'); }
+  }
+  if (!correct){ btn.classList.add('wrong'); }
+  var fb = box.querySelector('.fb');
+  fb.textContent = correct ? L(UI.ok) : L(UI.no);
+  fb.className = 'fb show ' + (correct ? 'ok' : 'no');
+}
+
+render();
+</script>
+</body>
+</html>
